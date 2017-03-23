@@ -22,7 +22,12 @@ auto func(int a, int b) {
     return sum;
 }
 int main() {
-    //创建一个异步操作a(future对象),其中第一参数`launch::async`(也是默认参数可以不写)标志着a为异步立即执行,实现上的实现有可能是创建一个新的线程去执行,第二个参数`func`为需要异步执行的函数,第三个和第四个参数为函数`func`所需的参数,如果你需要异步执行的函数没有参数则不要添加后续的参数,如`auto a=async(func,1,2);`
+    /*
+    创建一个异步操作a(future对象),其中第一参数`launch::async`(也是默认参数可以不
+    写)标志着a为异步立即执行,实现上的实现有可能是创建一个新的线程去执行,第二个参数
+    `func`为需要异步执行的函数,第三个和第四个参数为函数`func`所需的参数,如果你需要
+    异步执行的函数没有参数则不要添加后续的参数,如`auto a=async(func,1,2);`
+    */
     auto a = async(launch::async, func, 1, 2);
     //当前线程休眠1s
     this_thread::sleep_for(+1s);
@@ -47,7 +52,9 @@ auto func(int a, int b) {
     return sum;
 }
 int main() {
-    //创建一个异步操作,`launch::deferred`表明这是一个当前线程的延迟求值操作,这是一个惰性的方法,只会在你第一次想要得到结果的时候执行这个函数.
+    /*
+    创建一个异步操作,`launch::deferred`表明这是一个当前线程的延迟求值操作,这是一个惰性的方法,只会在你第一次想要得到结果的时候执行这个函数.
+    */
     auto a = async(launch::deferred, func, 1, 2);
     cout << sum << '\n';
     cout << a.get() << '\n';
