@@ -39,7 +39,7 @@ public:
       std::unique_lock<std::mutex> ulock(m_lock);
       if (m_stop)
         return std::async(std::launch::async,[&](){
-          f(args...);
+          return f(args...);
         });
       m_tasks.emplace([task]() { (*task)(); });
     }
