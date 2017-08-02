@@ -1,0 +1,94 @@
+
+#include <functional>
+#include <future>
+#include <iostream>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <thread>
+#include <vector>
+class event_queue {
+  public:
+    using message = std::pair<std::string, void *>;
+    using callback = std::function<void(void *)>;
+    using event = std::string;
+
+  public:
+    event_queue() {
+        m_thread = std::thread{[=]() {
+            for (;;) {
+                // std::cout << "----------lock" << std::endl;
+                std::unique_lock<std::mutex> ulock(m_lock);
+                m_notify.wait(ulock,
+                              [=]() { return m_stop || !m_queue.empty(); });
+                if (m_stop)
+                    break;
+                auto t = std::move(m_queue.front());
+                m_queue.pop();
+                ulock.unlock();
+                // std::cout << "----------unlock " << std::endl;
+                for (const auto &work : m_listen) {
+                    if (work.first == t.first) {
+                        work.second(t.second);
+                    }
+                }
+            }
+        }};
+    }
+    ~event_queue() {
+        {
+            std::unique_lock<std::mutex> ulock(m_lock);
+            m_stop = true;
+        }
+        m_notify.notify_all();
+        m_thread.join();
+    }
+
+  private:
+    std::vector<std::pair<event, callback>> m_listen;
+    std::queue<message> m_queue;
+    std::thread m_thread;
+    std::mutex m_lock;
+    std::condition_variable m_notify;
+    bool m_stop{false};
+
+  public:
+    void addEventListener(event name, callback func) {
+        m_listen.emplace_back(std::make_pair(name, func));
+    }
+    void addMessage(message &&msg) {
+        {
+            std::unique_lock<std::mutex> ulock(m_lock);
+            m_queue.push(std::forward<message>(msg));
+        }
+        m_notify.notify_one();
+    }
+};
+
+int main() {
+
+    event_queue listener;
+
+    listener.addEventListener(std::string("open"), [=](void *ptr) {
+        auto data = (int *)ptr;
+        std::cout << " in open event" << std::endl;
+        std::cout << *data << std::endl;
+    });
+
+    listener.addEventListener(std::string("close"), [=](void *ptr) {
+        auto data = (int *)ptr;
+        std::cout << " in close event" << std::endl;
+        std::cout << *data << std::endl;
+    });
+    int test;
+    bool flag = true;
+    while (std::cin >> test) {
+        if (flag) {
+            listener.addMessage({"open", (void *)(&test)});
+        } else {
+            listener.addMessage({"close", (void *)(&test)});
+        }
+        flag = !flag;
+    }
+    return 0;
+}
