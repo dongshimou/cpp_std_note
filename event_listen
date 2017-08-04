@@ -2,6 +2,7 @@
 #include <functional>
 #include <future>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <queue>
 #include <string>
@@ -12,6 +13,8 @@ class event_queue {
     using message = std::pair<std::string, void *>;
     using callback = std::function<void(void *)>;
     using event = std::string;
+    event_queue(const event_queue &) = delete;
+    event_queue &operator=(const event_queue &) = delete;
 
   public:
     event_queue() {
@@ -46,6 +49,7 @@ class event_queue {
 
   private:
     std::vector<std::pair<event, callback>> m_listen;
+    // std::multimap<event,callback>
     std::queue<message> m_queue;
     std::thread m_thread;
     std::mutex m_lock;
@@ -66,29 +70,48 @@ class event_queue {
 };
 
 int main() {
-
     event_queue listener;
 
     listener.addEventListener(std::string("open"), [=](void *ptr) {
         auto data = (int *)ptr;
-        std::cout << " in open event" << std::endl;
+        std::cout << " in \"open callback\" : ";
         std::cout << *data << std::endl;
     });
 
     listener.addEventListener(std::string("close"), [=](void *ptr) {
         auto data = (int *)ptr;
-        std::cout << " in close event" << std::endl;
+        std::cout << " in \"close callback 1\" : ";
+        std::cout << *data << std::endl;
+    });
+
+    listener.addEventListener(std::string("close"), [=](void *ptr) {
+        auto data = (int *)ptr;
+        std::cout << " in \"close callback 2\" : ";
         std::cout << *data << std::endl;
     });
     int test;
-    bool flag = true;
+    int flag = 0;
     while (std::cin >> test) {
-        if (flag) {
+        switch (flag) {
+        case 0: {
             listener.addMessage({"open", (void *)(&test)});
-        } else {
+        } break;
+        case 1: {
             listener.addMessage({"close", (void *)(&test)});
+        } break;
+        case 2: {
+            listener.addMessage({"get", (void *)(&test)});
+        } break;
+        case 3: {
+            listener.addMessage({"open", (void *)(&test)});
+            listener.addMessage({"close", (void *)(&test)});
+        } break;
+        default: {
+            flag = -1;
+            // not message
+        };
         }
-        flag = !flag;
+        flag++;
     }
     return 0;
 }
