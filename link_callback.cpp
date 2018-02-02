@@ -25,7 +25,7 @@ struct runner {
     }
 
     template<typename F, typename ...Args>
-     void binds(F &&f, Args &&...args)noexcept {
+    void binds(F &&f, Args &&...args)noexcept {
 //        暂时不写return
 //        using r = typename std::result_of<F(Args...)>::type;
 //        auto task = std::make_shared<std::packaged_task<r()>>(
@@ -35,9 +35,9 @@ struct runner {
 //        );
 //        auto result = task->get_future();
 //        func.push([task]() { (*task)(); });
-        auto task= [&]()->auto{
-                    return f(std::forward<Args>(args)...);
-                };
+        auto task = [&]() -> auto {
+            return f(std::forward<Args>(args)...);
+        };
         func.push(task);
     };
 
@@ -53,20 +53,19 @@ struct runner {
     };
 
     void run() {
-        try {
-            while (!func.empty()) {
-                auto i = std::move(func.front());
-                func.pop();
+        while (!func.empty()) {
+            auto i = std::move(func.front());
+            func.pop();
+            try {
                 i();
+            } catch (...) {
             }
-        } catch (...) {
-            //must be safe delete
         }
     }
 };
 
 template<typename ...Args>
-auto sum(Args &&...args){
+auto sum(Args &&...args) {
     return (args + ... +0);
 }
 
@@ -80,29 +79,41 @@ void echo(T &&t) {
 }
 
 int main() {
+    {
+        auto c = runner([]() {
+            std::cout << "fuck" << std::endl;
+        });
+        c.add_callback([](int a, int b) {
+                    std::cout << "a + b =" << a + b << std::endl;
+                }, 1, 2)
+                .add_callback([]() {
+                    std::cout << "you" << std::endl;
+                })
+                .add_callback([](int a, int b) {
+                    return a + b;
+                }, 2, 3)
+                .add_callback(hello)
+                .add_callback([]() {
+                    sum(1, 2, 3, 4, 5, 6);
+                })
+                .add_callback(echo<std::string>, "world")
+                .add_callback(sum<int, int, int>, 1, 2, 3);
 
-    auto c = runner([]() {
-        std::cout << "fuck" << std::endl;
-    });
-    c.add_callback([](int a, int b) {
-                std::cout << "a + b =" << a + b << std::endl;
-            }, 1, 2)
-            .add_callback([]() {
-                std::cout << "you" << std::endl;
-            })
-            .add_callback([](int a, int b) {
-                return a + b;
-            }, 2, 3)
-            .add_callback(hello)
-            .add_callback(echo<std::string>, "world")
-            .add_callback(sum<int, int, int>, 1, 2, 3);
+        runner d = runner();
+        d.add_callback([]() {
+            std::cout << "ddd\n";
+        });
+        d.add_callback([](int a, int b) {
+            if (b == 0) {
+                throw (" div 0");
+            }
+        }, 1, 0).add_callback([]() {
+            std::cout << "/0\n";
+        });
+//        d.run();
 
-    runner d=runner();
-    d.add_callback([](){
-        std::cout<<"ddd\n";
-    });
-
-    d.add_callback([](){});
-    std::cin.get();
+//        c.run();
+    }
+    std::cout << "delete c d" << std::endl;
     return 0;
 }
