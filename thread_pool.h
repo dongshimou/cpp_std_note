@@ -29,11 +29,11 @@ public:
   }
   template <typename F, typename... Args>
   auto add(F &&f, Args &&... args) noexcept
-      -> std::future<typename std::result_of<F(Args...)>::type> {
-    using r = typename std::result_of<F(Args...)>::type;
-    // std::packaged_task<r()> task([&]() -> r { return f(args...); });
+  //if std=c++17  Use std::invoke_result_t
+      -> std::future<std::result_of_t<F(Args...)>> {
+    using r = std::result_of_t<F(Args...)>;
     auto task = std::make_shared<std::packaged_task<r()>>(
-        [&]() -> r { return f(std::forward<Args>(args)...); });
+        [&]() -> r { return std::invoke(std::forward<F>(f),std::forward<Args>(args)...); });
     auto result = task->get_future();
     {
       std::unique_lock<std::mutex> ulock(m_lock);
