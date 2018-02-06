@@ -29,7 +29,7 @@ public:
   }
   template <typename F, typename... Args>
   auto add(F &&f, Args &&... args) noexcept
-  //if std=c++17  Use std::invoke_result_t
+  //if std=c++17  Use std::invoke_result_t<F,Args...>
       -> std::future<std::result_of_t<F(Args...)>> {
     using r = std::result_of_t<F(Args...)>;
     auto task = std::make_shared<std::packaged_task<r()>>(
