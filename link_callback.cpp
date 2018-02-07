@@ -36,7 +36,7 @@ struct runner {
 //        auto result = task->get_future();
 //        func.push([task]() { (*task)(); });
         auto task = [&]() -> auto {
-            return f(std::forward<Args>(args)...);
+            return std::invoke(std::forward<F>(f),std::forward<Args>(args)...);
         };
         func.push(task);
     };
