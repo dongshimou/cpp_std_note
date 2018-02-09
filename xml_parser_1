@@ -1,0 +1,325 @@
+//
+// Created by skadi on 2018/2/8.
+//
+
+#ifndef UNTITLED_XML_PARSER_HPP
+#define UNTITLED_XML_PARSER_HPP
+
+#include <string>
+#include <iostream>
+#include <vector>
+#include <variant>
+#include <functional>
+#include <map>
+
+#define log(x) std::cout<<x<<std::endl
+
+struct xml_tag;
+using xml_child=std::variant<std::string, std::vector<xml_tag *>>;
+using xml_attribute=std::map<std::string_view, std::string_view>;
+enum class ParserStatus {
+    Parser_OpenBegin,
+    Parser_OpenEnd,
+    Parser_OpenTag,
+    Parser_CloseTag,
+    Parser_CloseBegin,
+    Parser_CloseEnd,
+    Parser_Context,
+    Parser_Begin,
+    Parser_End,
+    Parser_Error,
+};
+
+struct xml_tag {
+    std::string label;
+    xml_child value;
+    xml_attribute attribute;
+    ParserStatus status;
+    std::string_view raw;
+};
+
+void parser(const std::string &trim) {
+    auto view = std::string_view(trim);
+    auto index = 0;
+
+    constexpr auto is_quota=[](int c)->int{
+        if (c=='\'')return 1;
+        else if(c=='\"')return 2;
+        else return 0;
+    };
+    constexpr auto is_slash=[](int c){
+        return c=='/';
+    };
+    constexpr auto is_equal=[](int c){
+        return c=='=';
+    };
+    constexpr auto is_higher=[](int c){
+        return c=='>';
+    };
+    constexpr auto is_lower=[](int c){
+        return c=='<';
+    };
+    constexpr auto issymbol=[](int c){
+        return c=='_'||c=='-';
+    };
+    constexpr auto is_alnum=[](int c){
+        return isalnum(c)||issymbol(c);
+    };
+    constexpr auto is_alpha=[](int c){
+        return isalpha(c)||issymbol(c);
+    };
+    constexpr auto is_space=[](int c){
+        return isspace(c);
+    };
+
+    log(view);
+    auto parser_stack = [&view, &index](auto &&self) -> xml_tag * {
+        auto tag = new xml_tag;
+        ParserStatus status = ParserStatus::Parser_OpenBegin;
+
+        auto trim_space = [&]() {
+            while (index != view.size()) {
+                if (is_space(view[index])) {
+                    index++;
+                    continue;
+                }
+                break;
+            }
+        };
+        auto next_view=[&](){
+            return view[index+1];
+        };
+        auto next_size=[&](){
+            return index+1<view.size();
+        };
+        auto make_error = [&]() ->std::string_view {
+            return std::string_view(view.begin() + index);
+        };
+        auto xml_open_begin = [&]() {
+            trim_space();
+            if (is_lower(view[index])) {
+                index++;
+                return ParserStatus::Parser_OpenTag;
+            } else {
+                return ParserStatus::Parser_Error;
+            }
+        };
+        auto xml_open_tag = [&]() {
+            auto parse_key = [&]() -> std::tuple<std::string_view, ParserStatus> {
+                auto p_s = index;
+                while (index != view.size()) {
+                    if (isalpha(view[index])) {
+                        index++;
+                    } else if (is_equal(view[index])) {
+                        auto p_view = std::string_view(view.begin() + p_s, index - p_s);
+                        index++;
+                        return std::tuple(std::move(p_view), ParserStatus::Parser_OpenTag);
+                    } else {
+                        break;
+                    }
+                }
+                return std::tuple(std::string_view(), ParserStatus::Parser_Error);
+            };
+            auto parse_value = [&]() -> std::tuple<std::string_view, ParserStatus> {
+                trim_space();
+                auto left=is_quota(view[index]);
+                if (left) {
+                    index++;
+                } else {
+                    return std::tuple(std::string_view(), ParserStatus::Parser_Error);
+                }
+                trim_space();
+                auto p_s = index;
+                while (index != view.size()) {
+                    if (is_alnum(view[index])) {
+                        index++;
+                    } else {
+                        break;
+                    }
+                }
+                trim_space();
+                auto right=is_quota(view[index]);
+                if (left==right) {
+                    auto p_view = std::string_view(view.begin() + p_s, index - p_s);
+                    index++;
+                    return std::tuple(std::move(p_view), ParserStatus::Parser_OpenTag);
+                }
+                return std::tuple(std::string_view(), ParserStatus::Parser_Error);
+            };
+            auto parse_attr = [&]() {
+                auto[key, key_status] = parse_key();
+                if (key_status == ParserStatus::Parser_Error) {
+                    return key_status;
+                }
+                auto[value, value_status] = parse_value();
+                if (value_status == ParserStatus::Parser_Error) {
+                    return value_status;
+                }
+//                tag->attribute[key]=value;
+                tag->attribute.emplace(std::make_pair(std::move(key), std::move(value)));
+            };
+            trim_space();
+            while (index != view.size()) {
+                if (is_alnum(view[index])) {
+                    tag->label += view[index];
+                    index++;
+                } else {
+                    break;
+                }
+            }
+            trim_space();
+            while (index < view.size()) {
+                if (is_alpha(view[index])) {
+                    auto attr_status = parse_attr();
+                    if (attr_status == ParserStatus::Parser_Error) {
+                        return attr_status;
+                    }
+                } else if (is_space(view[index])) {
+                    trim_space();
+                    continue;
+                } else {
+                    if (is_slash(view[index])&& next_size() && is_higher(next_view())) {
+                        index += 2;
+                        return ParserStatus::Parser_End;
+                    } else if (is_higher(view[index])) {
+                        return ParserStatus::Parser_OpenEnd;
+                    } else {
+                        return ParserStatus::Parser_Error;
+                    }
+                }
+            }
+        };
+        auto xml_open_end = [&]() {
+            if (is_higher(view[index])) {
+                index++;
+                return ParserStatus::Parser_Context;
+            }
+            return ParserStatus::Parser_Error;
+        };
+        auto xml_context = [&]() {
+            trim_space();
+            if (is_lower(view[index])&& next_size() && !is_slash(next_view())) {
+                xml_tag *temp = nullptr;
+                std::vector<xml_tag *> list;
+                while (is_lower(view[index]) && next_size() && !is_slash(next_view())) {
+                    temp = self(self);
+                    if (temp->status == ParserStatus::Parser_Error) {
+                        return ParserStatus::Parser_Error;
+                    }
+                    list.emplace_back(std::move(temp));
+                }
+                tag->value = std::move(list);
+            } else {
+                std::string context;
+                while (!is_lower(view[index])) {
+                    context += view[index];
+                    index++;
+                    if (index == view.size()) {
+                        return ParserStatus::Parser_Error;
+                    }
+                }
+                tag->value = std::move(context);
+            }
+            if (is_lower(view[index])&& next_size() && is_slash(next_view())) {
+                return ParserStatus::Parser_CloseBegin;
+            }
+            return ParserStatus::Parser_Error;
+        };
+        auto xml_close_begin = [&]() {
+            if (is_lower(view[index])&& next_size() && is_slash(next_view())) {
+                index += 2;
+                return ParserStatus::Parser_CloseTag;
+            }
+            return ParserStatus::Parser_Error;
+        };
+        auto xml_close_tag = [&]() {
+            auto p_s = index;
+            while (true) {
+                if (index == view.size()) {
+                    return ParserStatus::Parser_Error;
+                } else if (is_alnum(view[index])) {
+                    index++;
+                } else if (is_higher(view[index])) {
+                    break;
+                } else {
+                    return ParserStatus::Parser_Error;
+                }
+            }
+            std::string_view temp(view.begin() + p_s, index - p_s);
+            if (temp != tag->label) {
+                return ParserStatus::Parser_Error;
+            }
+            return ParserStatus::Parser_CloseEnd;
+        };
+        auto xml_close_end = [&]() {
+            if (is_higher(view[index])) {
+                index++;
+                return ParserStatus::Parser_End;
+            }
+            return ParserStatus::Parser_Error;
+        };
+
+        while (true) {
+            switch (status) {
+                case ParserStatus::Parser_Begin:
+                    status = ParserStatus::Parser_OpenBegin;
+                    break;
+                case ParserStatus::Parser_OpenBegin:
+                    status = xml_open_begin();
+                    break;
+                case ParserStatus::Parser_OpenTag:
+                    status = xml_open_tag();
+                    break;
+                case ParserStatus::Parser_OpenEnd:
+                    status = xml_open_end();
+                    break;
+                case ParserStatus::Parser_CloseBegin:
+                    status = xml_close_begin();
+                    break;
+                case ParserStatus::Parser_CloseTag:
+                    status = xml_close_tag();
+                    break;
+                case ParserStatus::Parser_CloseEnd:
+                    status = xml_close_end();
+                    break;
+                case ParserStatus::Parser_Context:
+                    status = xml_context();
+                    break;
+                case ParserStatus::Parser_End:
+                    tag->status = status;
+                    return tag;
+                default:
+                    tag->status = status;
+                    tag->raw=make_error();
+                    return tag;
+            }
+        }
+    };
+
+    auto root = parser_stack(parser_stack);
+    std::function<void(xml_tag *)> show = [&show](xml_tag *root) {
+        std::cout<<root->label<<("{")<<std::endl;
+        if (root->attribute.size()!=0)
+        std::cout<<"[";
+        for (auto[k, v]:root->attribute) {
+            std::cout << k << " = " << v << " ; ";
+        }
+        if (root->attribute.size()!=0)
+            std::cout<<"]"<<std::endl;
+        if (auto ptr = std::get_if<std::string>(&root->value)) {
+            log(*ptr);
+        } else if (auto ptr = std::get_if<std::vector<xml_tag *>>(&root->value)) {
+            for (const auto &v:*ptr) {
+                show(v);
+            }
+        }
+        log("}");
+    };
+    if (root->status != ParserStatus::Parser_Error)
+        show(root);
+    else {
+        log(root->raw);
+    }
+}
+
+#endif //UNTITLED_XML_PARSER_HPP
