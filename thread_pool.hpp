@@ -27,14 +27,12 @@ public:
         }
     }
     template<typename F, typename... Args>
-    auto add(F &&f, Args &&... args) noexcept
-    //* -std=c++17
-    -> std::future<std::invoke_result_t<F, Args...>> {
+    auto add(F &&f, Args &&... args) noexcept {
+#if __cplusplus>=201703L
         using r=std::invoke_result_t<F, Args...>;
-        /*/// -std=c++11
-        -> std::future<std::result_of_t<F(Args...)>> {
-            using r = std::result_of_t<F(Args...)>;
-        //*/
+#else
+        using r = std::result_of_t<F(Args...)>;
+#endif
         auto task_pack_ptr = std::make_shared<std::packaged_task<r()>>();
         if (m_copy) {
             task_pack_ptr = std::make_shared<std::packaged_task<r()>>([=]() -> r {
