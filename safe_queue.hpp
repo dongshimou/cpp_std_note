@@ -16,12 +16,16 @@ public:
     safe_queue&operator=(safe_queue&&)= default;
     T front(){
         ulock lock(ml);
-        cv.wait(lock);
+        while(q.empty()) {
+            cv.wait(lock);
+        }
         return q.front();
     }
     T pop_front(){
         ulock lock(ml);
-        cv.wait(lock);
+        while(q.empty()) {
+            cv.wait(lock);
+        }
         auto res=q.front();
         q.pop();
         return res;
