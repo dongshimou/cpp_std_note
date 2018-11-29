@@ -1,83 +1,90 @@
-#include <functional>
-#include <future>
 #include <iostream>
+
+#include <functional>
 #include <queue>
+#include <mutex>
+#include <condition_variable>
 #include <thread>
-#include <vector>
+#include <future>
+#include <type_traits>
+
+// template <typename T>
+// void log(T&&t){
+//     std::cout<<t<<std::endl;
+// }
+// template <typename T,typename ...Args>
+// void log(T&&t,Args&&...args){
+//     log(std::forward<T>(t));
+//     log(std::forward<Args>(args)...);
+// };
 
 class thread_pool {
-public:
-    explicit thread_pool(size_t capacity,bool copy=false) noexcept {
-        m_copy=copy;
-        for (size_t i = 0; i < capacity; i++) {
-            m_threads.emplace_back([=]() -> void {
-                for (;;) {
-                    std::function<void()> task;
-                    {
-                        std::unique_lock<std::mutex> ulock(m_lock);
-                        m_notify.wait(ulock, [this] { return m_stop || !m_tasks.empty(); });
-                        if (m_stop && m_tasks.empty())
-                            return;
-                        task = std::move(m_tasks.front());
-                        m_tasks.pop();
-                    }
-                    task();
-                }
-            });
-        }
-    }
-    template<typename F, typename... Args>
-    auto add(F &&f, Args &&... args) noexcept {
-#if __cplusplus>=201703L
-        using r=std::invoke_result_t<F, Args...>;
-#else
-        using r = std::result_of_t<F(Args...)>;
-#endif
-        auto task_pack_ptr = std::make_shared<std::packaged_task<r()>>();
-        if (m_copy) {
-            task_pack_ptr = std::make_shared<std::packaged_task<r()>>([=]() -> r {
-                return std::invoke(std::forward<F>(const_cast<F &&>(f)),
-                                   std::forward<Args>(const_cast<Args &&>(args))...);
-            });
-        } else {
-            task_pack_ptr = std::make_shared<std::packaged_task<r()>>([&]() -> r {
-                return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-            });
-        }
-        auto result = task_pack_ptr->get_future();
-        {
-            std::unique_lock<std::mutex> ulock(m_lock);
-            if (m_stop)
-                return std::async(std::launch::async, [&]() {
-                    return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-                });
-            m_tasks.emplace([task_pack_ptr]() { (*task_pack_ptr)(); });
-        }
-        m_notify.notify_one();
-        return result;
-    }
-    ~thread_pool() {
-        {
-            std::unique_lock<std::mutex> ulock(m_lock);
-            m_stop = true;
-        }
-        m_notify.notify_all();
-        for (auto &t : m_threads)
-            t.join();
-    }
-
-private:
-    std::vector<std::thread> m_threads;
-    std::queue<std::function<void()>> m_tasks;
+    std::queue<std::function<void(void)>>m_tasks;
+    std::vector<std::thread>m_threads;
     std::mutex m_lock;
     std::condition_variable m_notify;
     bool m_stop = false;
-    bool m_copy = false;
+    using ulock=std::unique_lock<std::mutex>;
 public:
-    thread_pool(const thread_pool&)= delete;
-    thread_pool(thread_pool&&)= default;
-    thread_pool&operator=(const thread_pool&)= delete;
-    thread_pool&operator=(thread_pool&&)= default;
+    explicit  thread_pool(size_t cap)noexcept{
+        m_threads.emplace_back([&](){
+            while (true){
+                std::function<void(void)>task;
+                {
+                    //auto lock
+                    ulock l(m_lock);
+                    m_notify.wait(l, [this]() {
+                        return m_stop || !m_tasks.empty();
+                    });
+                    if (m_stop && m_tasks.empty()) {
+                        break;
+                    }
+                    task = m_tasks.front();
+                    m_tasks.pop();
+                    //auto unlock
+                }
+                task();
+            }
+        });
+    }
+    template <typename F,typename... Args>
+    auto add(F&&f,Args&&...args)noexcept{
+        using r=std::invoke_result_t<F,Args...>;
+#if 1
+        auto tmp=std::make_tuple(std::forward<Args>(args)...);
+        auto todo=[&,t=std::move(tmp)]()->r{
+                    return std::apply(std::forward<F>(f),t);
+                };
+#else
+        auto todo=[&]()->r{ //can't forward args...
+            return std::invoke(std::forward<F>(f),std::forward<Args>(args)...);
+        };
+#endif
+        auto tpp=std::make_shared<std::packaged_task<r(void)>>(std::move(todo));
+        {
+            //auto lock
+            ulock l(m_lock);
+            if (m_stop) {
+                return std::async(std::forward<F>(f), std::forward<Args>(args)...);
+            }
+            m_tasks.emplace([=]() {
+                (*tpp)();
+            });
+            //auto unlock
+        }
+        m_notify.notify_one();
+        return tpp->get_future();;
+    }
+    ~thread_pool(){
+        {
+            ulock l(m_lock);
+            m_stop=true;
+        }
+        m_notify.notify_one();
+        for(auto&t:m_threads){
+            t.join();
+        }
+    }
 };
 
 //using namespace std;
@@ -113,7 +120,7 @@ public:
 //
 //int main() {
 //
-//    thread_pool *pool = new thread_pool(4, true);
+//    thread_pool *pool = new thread_pool(4);
 //    auto f = [](node &&a) {
 //        this_thread::sleep_for(+1s);
 //        cout << "v = " << a.v << endl;
