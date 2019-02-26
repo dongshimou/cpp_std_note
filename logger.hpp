@@ -74,8 +74,8 @@ public:
 #define LINE2STR(x) #x
 #define LINE2STRHELP(x) LINE2STR(x)
 #define POS ("[" __FILE__ ":line " LINE2STRHELP(__LINE__) "]")
-#define DATE (time::get_date_str())
-#define TIME (time::get_time_str())
+#define DATE (logger::time::get_date_str())
+#define TIME (logger::time::get_time_str())
 
 template <typename T>
 inline void logf(T&&t){
@@ -102,7 +102,6 @@ inline void debug(Args&&...args){
     prefix+="]";
     logger::log(prefix,std::forward<Args>(args)...);
 }
-
 
 }
 #endif //YANTHEMS_LOGGER_HPP
