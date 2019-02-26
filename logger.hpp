@@ -74,6 +74,7 @@ public:
 #define LINE2STR(x) #x
 #define LINE2STRHELP(x) LINE2STR(x)
 #define POS ("[" __FILE__ ":line " LINE2STRHELP(__LINE__) "]")
+#define FUN (__func__)
 #define DATE (logger::time::get_date_str())
 #define TIME (logger::time::get_time_str())
 
@@ -89,7 +90,7 @@ inline void logf(T&&t,Args&&...args){
 
 template <typename ...Args>
 inline void log(Args&&...args){
-    std::unique_lock<mutex>ul;
+    std::unique_lock<std::mutex>ul;
     logf(std::forward<Args>(args)...);
 }
 template <typename... Args>
