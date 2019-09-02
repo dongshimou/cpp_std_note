@@ -4,20 +4,25 @@
 #include <functional>
 #include <tuple>
 
+template <typename T> struct type_helper : public type_helper<decltype(&T::operator())> {};
+// type helper
+template <typename ClassType, typename ReturnType, typename... Args>
+struct type_helper<ReturnType(ClassType::*)(Args...) const> {
+    // number of arguments
+    enum : size_t { arity = sizeof...(Args) };
+    // return type
+    using result_type = ReturnType;
+    // arg type
+    template <size_t i> struct arg { using type = typename std::tuple_element<i, std::tuple<Args...>>::type; };
+    using stdfunc_t = std::function<ReturnType(Args...)>;
+};
+
 class Test{
 private:
     std::map<std::string,std::any>func;
 public:
     Test() {
-        this->regist<int>("f1",[=](int a){
-            this->f1(a);
-        });
-        this->regist<std::string>("f2",[=](std::string a){
-            this->f2(std::forward<std::string>(a));
-        });
-        this->regist<const char*>("f3",[=](const char* a){
-            this->f3(a);
-        });
+
     }
     template <typename... Args>
     void Run(const std::string&f,Args&&...args)noexcept{
@@ -37,21 +42,19 @@ public:
 //        }
     }
 
-
+#if 1
+    template <typename F>
+    void regist(const std::string&name,F&&f)noexcept{
+        //boost::function_types::parameter_types
+        auto obj=typename type_helper<F>::stdfunc_t{std::forward<F>(f)};
+        this->func[name]=std::any(obj);
+    }
+#else
     template <typename ...Args,typename F>
     void regist(const std::string&name,F&&f)noexcept{
         this->func[name]=std::any(std::function<void(Args...)>(std::forward<F>(f)));
     }
-
-#if 0
-    template <typename F>
-    void regist(const std::string&name,F&&f)noexcept{
-        //boost::function_types::parameter_types
-        //get F Args
-        this->func[name]=std::any(std::function<void(Args...)>(std::forward<F>(f)));
-    }
 #endif
-
     void f1(int a){
         std::cout<<__func__<<":"<<a<<std::endl;
     }
@@ -69,17 +72,8 @@ public:
 /*
 int main() {
     Test t;
-    t.Run("f1", 1);
-    std::string b{"aaa"};
-    t.Run("f2", static_cast<std::string>(b));
-    t.Run("f2", b);
-    t.Run("f2", std::string("bbb"));
-    t.Run("f2", "abc");
-    const char *cc = "ccc";
-    t.Run("f3", cc);
-    t.Run("f3", static_cast<const char *>(cc));
-    t.Run("f4");
 
+#if 0
     t.regist<int>("click", [](int a) {
         std::cout << "click " << a << std::endl;
     });
@@ -87,9 +81,25 @@ int main() {
     t.regist<int, int>("add", [](int a, int b) {
         std::cout << "add " << a + b << std::endl;
     });
+#else
 
+    auto click=[](int a){
+        std::cout<<"click "<<a<<std::endl;
+    };
+
+#if 0
+    t.regist("click",[](int a){
+        std::cout<<"click "<<a<<std::endl;
+    });
+#else
+    t.regist("click",std::move(click));
+
+#endif
+
+#endif
     t.Run("click", 3);
-    t.Run("add", 1, 4);
+    t.Run("click",5);
+
 
     return 0;
 }
