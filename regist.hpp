@@ -1,3 +1,6 @@
+#ifndef REGISTER_REG_HPP
+#define REGISTER_REG_HPP
+
 #include <iostream>
 #include <any>
 #include <map>
@@ -17,90 +20,50 @@ struct type_helper<ReturnType(ClassType::*)(Args...) const> {
     using stdfunc_t = std::function<ReturnType(Args...)>;
 };
 
-class Test{
+class registers{
 private:
-    std::map<std::string,std::any>func;
+    std::map<std::string,std::any>m_reg_funcs;
 public:
-    Test() {
-
-    }
+    registers()= default;
+    ~registers()= default;
+    registers(const registers&)= delete;
+    registers&operator=(const registers&)= delete;
     template <typename... Args>
-    void Run(const std::string&f,Args&&...args)noexcept{
-        auto ff=this->func[f];
-//        if (ff.has_value()){
-            try {
-//                auto t=std::function<void(Args...)>();
-                auto fff=std::any_cast<std::function<void(Args...)>>(ff);
-#if 0
-                fff(std::forward<Args>(args)...);
-#else
-                std::invoke(fff,std::forward<Args>(args)...);
-#endif
-            }catch (const std::exception&e) {
-                std::cout<<__func__<<":"<<e.what()<<std::endl;
-            }
-//        }
+    void Run(const std::string&f,Args&&...args)noexcept {
+        try {
+            std::invoke(std::any_cast<std::function<void(Args...)>>(this->m_reg_funcs[f]), std::forward<Args>(args)...);
+        } catch (const std::exception &e) {
+            std::cout << __func__ << ":" << e.what() << std::endl;
+        }
     }
-
-#if 1
     template <typename F>
     void regist(const std::string&name,F&&f)noexcept{
         //boost::function_types::parameter_types
         auto obj=typename type_helper<F>::stdfunc_t{std::forward<F>(f)};
-        this->func[name]=std::any(obj);
+        this->m_reg_funcs[name]=std::any(obj);
     }
-#else
-    template <typename ...Args,typename F>
-    void regist(const std::string&name,F&&f)noexcept{
-        this->func[name]=std::any(std::function<void(Args...)>(std::forward<F>(f)));
-    }
-#endif
-    void f1(int a){
-        std::cout<<__func__<<":"<<a<<std::endl;
-    }
-    void f2(std::string b){
-        std::cout<<__func__<<":"<<b<<std::endl;
-    }
-    void f3(const char*c){
-        std::cout<<__func__<<":"<<c<<std::endl;
-    }
-    int f5(int a){
-        return a+1;
-    }
-
 };
+#endif //REGISTER_REG_HPP
+
+
 /*
+
 int main() {
+
+    class Test:public registers{
+    public:
+
+    };
     Test t;
 
-#if 0
-    t.regist<int>("click", [](int a) {
-        std::cout << "click " << a << std::endl;
-    });
-
-    t.regist<int, int>("add", [](int a, int b) {
-        std::cout << "add " << a + b << std::endl;
-    });
-#else
-
-    auto click=[](int a){
-        std::cout<<"click "<<a<<std::endl;
-    };
-
-#if 0
     t.regist("click",[](int a){
-        std::cout<<"click "<<a<<std::endl;
+        std::cout<<"click :"<<a<<std::endl;
     });
-#else
-    t.regist("click",std::move(click));
 
-#endif
-
-#endif
-    t.Run("click", 3);
-    t.Run("click",5);
-
+    t.Run("click",3);
+    t.Run("click",4);
 
     return 0;
 }
+
 */
