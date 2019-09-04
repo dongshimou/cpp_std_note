@@ -1,5 +1,5 @@
-#ifndef REGISTER_REG_HPP
-#define REGISTER_REG_HPP
+#ifndef YANTHEMS_REGIST_HPP
+#define YANTHEMS_REGIST_HPP
 
 #include <iostream>
 #include <any>
@@ -29,7 +29,7 @@ public:
     registers(const registers&)= delete;
     registers&operator=(const registers&)= delete;
     template <typename... Args>
-    void Run(const std::string&f,Args&&...args)noexcept {
+    void run(const std::string&f,Args&&...args)noexcept {
         try {
             std::invoke(std::any_cast<std::function<void(Args...)>>(this->m_reg_funcs[f]), std::forward<Args>(args)...);
         } catch (const std::exception &e) {
@@ -37,33 +37,10 @@ public:
         }
     }
     template <typename F>
-    void regist(const std::string&name,F&&f)noexcept{
+    void bind(const std::string&name,F&&f)noexcept{
         //boost::function_types::parameter_types
         auto obj=typename type_helper<F>::stdfunc_t{std::forward<F>(f)};
         this->m_reg_funcs[name]=std::any(obj);
     }
 };
-#endif //REGISTER_REG_HPP
-
-
-/*
-
-int main() {
-
-    class Test:public registers{
-    public:
-
-    };
-    Test t;
-
-    t.regist("click",[](int a){
-        std::cout<<"click :"<<a<<std::endl;
-    });
-
-    t.Run("click",3);
-    t.Run("click",4);
-
-    return 0;
-}
-
-*/
+#endif //YANTHEMS_REGIST_HPP
