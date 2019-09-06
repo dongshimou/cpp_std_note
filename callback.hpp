@@ -1,63 +1,22 @@
-#ifndef YANTHEMS_CALLBACK_HPP
-#define YANTHEMS_CALLBACK_HPP
 
-#include <iostream>
+#ifndef CPPLIB_CALLBACK_HPP
+#define CPPLIB_CALLBACK_HPP
 
-#include <string>
 #include <functional>
-#include <vector>
-#include <map>
-#include <queue>
-#include <future>
-
+#include <tuple>
+#include <type_traits>
 class callback {
-private:
-    std::queue<std::function<void()>> m_cb_func;
-public:
-    callback() = default;
-
-    callback(const callback &) = delete;
-
-    callback(callback &&) = default;
-
-    callback &operator=(const callback &) = delete;
-
-    callback &operator=(callback &&b) = default;
-
-    template<typename F, typename ...Args>
-    callback(F &&f, Args &&...args) noexcept {
-        binds(std::forward<F>(f), std::forward<Args>(args)...);
-    };
-
-    ~callback() noexcept {
-        run();
-    }
-
-private:
-    template<typename F, typename ...Args>
-    void binds(F &&f, Args &&...args) noexcept {
-        auto tmp = std::make_tuple(std::forward<Args>(args)...);
-        m_cb_func.emplace([&, t = std::move(tmp)]() -> auto {
-            return std::apply(std::forward<F>(f), t);
-        });
-    };
 public:
     template<typename F, typename ...Args>
-    callback &add(F &&f, Args &&...args) noexcept {
-        binds(std::forward<F>(f), std::forward<Args>(args)...);
-        return *this;
-    };
-
-    void run() {
-        while (!m_cb_func.empty()) {
-            auto i = m_cb_func.front();
-            m_cb_func.pop();
-            try {
-                i();
-            } catch (...) {
-            }
+    constexpr auto add(F &&f, Args &&...args) {
+        using r=std::invoke_result_t<F, Args...>;
+        if constexpr (std::is_same_v < void, r >) {
+            std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+            return *this;
+        } else {
+            return std::make_tuple(*this, std::invoke(std::forward<F>(f), std::forward<Args>(args)...));
         }
     }
 };
 
-#endif //YANTHEMS_CALLBACK_HPP
+#endif //CPPLIB_CALLBACK_HPP
